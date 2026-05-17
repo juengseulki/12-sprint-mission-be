@@ -1,9 +1,20 @@
 import prisma from "../lib/prisma.js";
 
-// 상품 등록
+const productSelect = {
+  id: true,
+  name: true,
+  description: true,
+  price: true,
+  tags: true,
+  image: true,
+  likeCount: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
 export async function createProduct(req, res) {
   try {
-    const { name, description, price, tags } = req.body;
+    const { name, description, price, tags, image } = req.body;
 
     if (!name || !description || price === undefined || price === null) {
       return res.status(400).json({
@@ -17,16 +28,9 @@ export async function createProduct(req, res) {
         description,
         price: Number(price),
         tags: Array.isArray(tags) ? tags : [],
+        image: image || null,
       },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        tags: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: productSelect,
     });
 
     res.status(201).json(product);
@@ -38,7 +42,6 @@ export async function createProduct(req, res) {
   }
 }
 
-// 상품 목록 조회
 export async function getProducts(req, res) {
   try {
     const {
@@ -67,18 +70,15 @@ export async function getProducts(req, res) {
         }
       : {};
 
+    const orderByOption =
+      orderBy === "like" ? { likeCount: "desc" } : { createdAt: "desc" };
+
     const products = await prisma.product.findMany({
       where,
       skip: Number(offset),
       take: Number(limit),
-      orderBy:
-        orderBy === "recent" ? { createdAt: "desc" } : { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        createdAt: true,
-      },
+      orderBy: orderByOption,
+      select: productSelect,
     });
 
     const totalCount = await prisma.product.count({ where });
@@ -95,7 +95,6 @@ export async function getProducts(req, res) {
   }
 }
 
-// 상품 상세 조회
 export async function getProductById(req, res) {
   try {
     const id = Number(req.params.id);
@@ -108,14 +107,7 @@ export async function getProductById(req, res) {
 
     const product = await prisma.product.findUnique({
       where: { id },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        tags: true,
-        createdAt: true,
-      },
+      select: productSelect,
     });
 
     if (!product) {
@@ -133,25 +125,14 @@ export async function getProductById(req, res) {
   }
 }
 
-// 상품 수정
 export async function updateProduct(req, res) {
   try {
     const id = Number(req.params.id);
-    const { name, description, price, tags } = req.body;
+    const { name, description, price, tags, image } = req.body;
 
     if (Number.isNaN(id)) {
       return res.status(400).json({
         message: "올바르지 않은 상품 id입니다.",
-      });
-    }
-
-    const existingProduct = await prisma.product.findUnique({
-      where: { id },
-    });
-
-    if (!existingProduct) {
-      return res.status(404).json({
-        message: "상품을 찾을 수 없습니다.",
       });
     }
 
@@ -164,28 +145,27 @@ export async function updateProduct(req, res) {
         ...(tags !== undefined
           ? { tags: Array.isArray(tags) ? tags : [] }
           : {}),
+        ...(image !== undefined ? { image } : {}),
       },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        tags: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: productSelect,
     });
 
     res.status(200).json(updatedProduct);
   } catch (error) {
     console.error(error);
+
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        message: "상품을 찾을 수 없습니다.",
+      });
+    }
+
     res.status(500).json({
       message: "상품 수정 실패",
     });
   }
 }
 
-// 상품 삭제
 export async function deleteProduct(req, res) {
   try {
     const id = Number(req.params.id);
@@ -193,16 +173,6 @@ export async function deleteProduct(req, res) {
     if (Number.isNaN(id)) {
       return res.status(400).json({
         message: "올바르지 않은 상품 id입니다.",
-      });
-    }
-
-    const existingProduct = await prisma.product.findUnique({
-      where: { id },
-    });
-
-    if (!existingProduct) {
-      return res.status(404).json({
-        message: "상품을 찾을 수 없습니다.",
       });
     }
 
@@ -215,6 +185,13 @@ export async function deleteProduct(req, res) {
     });
   } catch (error) {
     console.error(error);
+
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        message: "상품을 찾을 수 없습니다.",
+      });
+    }
+
     res.status(500).json({
       message: "상품 삭제 실패",
     });

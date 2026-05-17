@@ -1,9 +1,18 @@
 import prisma from "../lib/prisma.js";
 
-// 게시글 등록
+const articleSelect = {
+  id: true,
+  title: true,
+  content: true,
+  image: true,
+  likeCount: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
 export async function createArticle(req, res) {
   try {
-    const { title, content } = req.body;
+    const { title, content, image } = req.body;
 
     if (!title || !content) {
       return res.status(400).json({
@@ -15,14 +24,9 @@ export async function createArticle(req, res) {
       data: {
         title,
         content,
+        image: image || null,
       },
-      select: {
-        id: true,
-        title: true,
-        content: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: articleSelect,
     });
 
     res.status(201).json(article);
@@ -34,7 +38,6 @@ export async function createArticle(req, res) {
   }
 }
 
-// 게시글 상세 조회
 export async function getArticleById(req, res) {
   try {
     const id = Number(req.params.id);
@@ -47,12 +50,7 @@ export async function getArticleById(req, res) {
 
     const article = await prisma.article.findUnique({
       where: { id },
-      select: {
-        id: true,
-        title: true,
-        content: true,
-        createdAt: true,
-      },
+      select: articleSelect,
     });
 
     if (!article) {
@@ -70,11 +68,10 @@ export async function getArticleById(req, res) {
   }
 }
 
-// 게시글 수정
 export async function updateArticle(req, res) {
   try {
     const id = Number(req.params.id);
-    const { title, content } = req.body;
+    const { title, content, image } = req.body;
 
     if (Number.isNaN(id)) {
       return res.status(400).json({
@@ -82,41 +79,32 @@ export async function updateArticle(req, res) {
       });
     }
 
-    const existingArticle = await prisma.article.findUnique({
-      where: { id },
-    });
-
-    if (!existingArticle) {
-      return res.status(404).json({
-        message: "게시글을 찾을 수 없습니다.",
-      });
-    }
-
     const article = await prisma.article.update({
       where: { id },
       data: {
-        title,
-        content,
+        ...(title !== undefined ? { title } : {}),
+        ...(content !== undefined ? { content } : {}),
+        ...(image !== undefined ? { image } : {}),
       },
-      select: {
-        id: true,
-        title: true,
-        content: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: articleSelect,
     });
 
     res.status(200).json(article);
   } catch (error) {
     console.error(error);
+
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        message: "게시글을 찾을 수 없습니다.",
+      });
+    }
+
     res.status(500).json({
       message: "게시글 수정 실패",
     });
   }
 }
 
-// 게시글 삭제
 export async function deleteArticle(req, res) {
   try {
     const id = Number(req.params.id);
@@ -124,16 +112,6 @@ export async function deleteArticle(req, res) {
     if (Number.isNaN(id)) {
       return res.status(400).json({
         message: "올바르지 않은 게시글 id입니다.",
-      });
-    }
-
-    const existingArticle = await prisma.article.findUnique({
-      where: { id },
-    });
-
-    if (!existingArticle) {
-      return res.status(404).json({
-        message: "게시글을 찾을 수 없습니다.",
       });
     }
 
@@ -146,13 +124,19 @@ export async function deleteArticle(req, res) {
     });
   } catch (error) {
     console.error(error);
+
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        message: "게시글을 찾을 수 없습니다.",
+      });
+    }
+
     res.status(500).json({
       message: "게시글 삭제 실패",
     });
   }
 }
 
-// 게시글 목록 조회
 export async function getArticles(req, res) {
   try {
     const {
@@ -164,35 +148,22 @@ export async function getArticles(req, res) {
 
     const where = keyword
       ? {
-          OR: [
-            {
-              title: {
-                contains: keyword,
-                mode: "insensitive",
-              },
-            },
-            {
-              content: {
-                contains: keyword,
-                mode: "insensitive",
-              },
-            },
-          ],
+          title: {
+            contains: keyword,
+            mode: "insensitive",
+          },
         }
       : {};
+
+    const orderByOption =
+      orderBy === "like" ? { likeCount: "desc" } : { createdAt: "desc" };
 
     const articles = await prisma.article.findMany({
       where,
       skip: Number(offset),
       take: Number(limit),
-      orderBy:
-        orderBy === "recent" ? { createdAt: "desc" } : { createdAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        content: true,
-        createdAt: true,
-      },
+      orderBy: orderByOption,
+      select: articleSelect,
     });
 
     const totalCount = await prisma.article.count({ where });
